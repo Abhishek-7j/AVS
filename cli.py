@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from cve_lookup import search_cve
 from intel_fusion import gather_intel
 from scanner import PROFILE_DESCRIPTION, scan_target
+from target_dossier import build_target_dossier
 from vuln_checker import calculate_risk_score, check_vulnerabilities
 
 
@@ -37,7 +38,7 @@ def run_assessment(
             if cves:
                 cve_block[key] = [{"id": c[0], "desc": c[1]} for c in cves]
 
-    return {
+    bundle = {
         "target": target,
         "resolved": resolved,
         "scanned_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -51,6 +52,8 @@ def run_assessment(
         "risk_level": risk,
         "cve_hints": cve_block,
     }
+    bundle["target_dossier"] = build_target_dossier(bundle)
+    return bundle
 
 
 def main() -> int:

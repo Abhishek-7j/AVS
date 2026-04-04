@@ -13,6 +13,7 @@ from plugins import Finding
 from report_generator import generate_report
 from scanner import PROFILES, scan_target
 from spectral_surface import show_spectral_surface
+from target_dossier import build_target_dossier
 from vuln_checker import calculate_risk_score, check_vulnerabilities
 
 results: list[tuple] = []
@@ -178,15 +179,31 @@ def start_scan() -> None:
                 ui_log(f"Aliases: {', '.join(intel.dns_aliases) or '—'}\n")
                 for layer in intel.http_layers:
                     ui_log(
-                        f"  {layer.get('scheme')}:{layer.get('port')} {layer.get('status_line', '')[:80]}\n"
+                        f"  {layer.get('scheme')}:{layer.get('port')} {layer.get('path', '/')} "
+                        f"{layer.get('status_line', '')[:72]}\n"
                     )
-                    if layer.get("title"):
+                    if layer.get("path", "/") == "/" and layer.get("title"):
                         ui_log(f"      title: {layer.get('title', '')[:100]}\n")
+                    if layer.get("path") == "/robots.txt" and layer.get("body_preview"):
+                        ui_log(f"      robots preview: {layer.get('body_preview', '')[:80]}…\n")
                 for t in intel.tls_layers:
                     ui_log(
                         f"  TLS:{t.get('port')} {t.get('negotiated', '')} "
-                        f"exp={t.get('not_after', '')}\n"
+                        f"cipher={t.get('cipher', [])[:2]} exp={t.get('not_after', '')}\n"
                     )
+                ui_log("\n📡 Deep DNS (host + apex)\n")
+                ui_log("—" * 40 + "\n")
+                dd = intel.dns_deep
+                rp = dd.get("reachability_probe") or {}
+                ui_log(f"TCP quick check: 80={rp.get('tcp_80')}  443={rp.get('tcp_443')}\n")
+                ui_log(f"Apex domain: {dd.get('apex_name') or '—'}\n")
+                hr = dd.get("host") or {}
+                for rtype in ("A", "AAAA", "MX", "NS", "TXT"):
+                    v = hr.get(rtype)
+                    if isinstance(v, list) and v:
+                        tail = ", ".join(v[:5])
+                        extra = f" (+{len(v) - 5} more)" if len(v) > 5 else ""
+                        ui_log(f"  {rtype}: {tail}{extra}\n")
             else:
                 last_intel = None
 
@@ -243,6 +260,27 @@ def start_scan() -> None:
             ui_log("—" * 40 + "\n")
             ui_log(f"Security score: {score}/100\n")
             ui_log(f"Risk level: {risk_level}\n")
+
+            dossier_bundle = {
+                "target": target,
+                "resolved": resolved,
+                "intel_fusion": intel.as_dict() if intel else {},
+                "open_ports": ports_payload,
+                "findings": findings_payload,
+                "score": score,
+                "risk_level": risk_level,
+                "cve_hints": {},
+            }
+            dossier = build_target_dossier(dossier_bundle)
+            ui_log("\n📋 Target dossier (summary)\n")
+            ui_log("—" * 40 + "\n")
+            ui_log(f"{dossier.get('scope_note', '')}\n")
+            ui_log(
+                f"Open ports: {dossier['surface']['open_port_count']} · "
+                f"HTTP probes: {dossier['application_intel']['http_probes']} · "
+                f"TLS records: {dossier['application_intel']['tls_inspections']} · "
+                f"Findings: {dossier['assessment']['finding_count']}\n"
+            )
 
             current += step
             set_progress(min(1.0, current))

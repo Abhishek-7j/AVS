@@ -3,3 +3,5 @@ python-nmap>=0.7.1
 matplotlib>=3.8.0
 reportlab>=4.0.0
 requests>=2.31.0
+dnspython>=2.6.0
+charset-normalizer>=3.3.0

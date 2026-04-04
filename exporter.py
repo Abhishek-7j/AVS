@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 
 from plugins import Finding
+from target_dossier import build_target_dossier
 
 
 def export_full_report(
@@ -27,7 +28,9 @@ def export_full_report(
         "open_ports": [{"port": p, "service": s, "version": v} for p, s, v in results],
         "findings": [f.as_dict() for f in findings],
         "intel_fusion": intel,
+        "cve_hints": {},
     }
+    bundle["target_dossier"] = build_target_dossier(bundle)
 
     with open(os.path.join(folder, "scan_bundle.json"), "w", encoding="utf-8") as f:
         json.dump(bundle, f, indent=2)

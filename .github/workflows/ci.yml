@@ -23,10 +23,10 @@ jobs:
       - name: Byte-compile all modules
         run: |
           python -m py_compile \
-            cli.py config.py cve_lookup.py dashboard.py database.py \
+            cli.py config.py cve_lookup.py dashboard.py dns_deep.py \
             exporter.py intel_fusion.py login.py main.py plugins.py \
             report_generator.py scanner.py spectral_surface.py \
-            turbo_sweep.py vuln_checker.py
+            target_dossier.py turbo_sweep.py vuln_checker.py
 
       - name: Import smoke (skip main.py — it boots GUI on import)
-        run: python -c "import cli, scanner, intel_fusion, vuln_checker; print('imports ok')"
+        run: python -c "import cli, dns_deep, target_dossier, scanner, intel_fusion, vuln_checker; print('imports ok')"

@@ -78,6 +78,8 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
         headers = layer.get("headers") or {}
         if not layer.get("reachable"):
             continue
+        if layer.get("path", "/") != "/":
+            continue
 
         if scheme == "https" and "strict-transport-security" not in headers:
             out.append(
@@ -153,6 +155,25 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                     service=scheme,
                     description=f"Header exposes stack hint: {xpb[:120]}.",
                     solution="Remove or genericize X-Powered-By in production.",
+                    refs=["CWE-200"],
+                )
+            )
+
+    for layer in intel.http_layers:
+        if layer.get("path") != "/robots.txt" or not layer.get("reachable"):
+            continue
+        prev = (layer.get("body_preview") or "").lower()
+        if "disallow:" in prev or "user-agent:" in prev:
+            out.append(
+                Finding(
+                    plugin_id="AVS-WEB-ROBOTS",
+                    name="robots.txt exposes crawl rules",
+                    severity="Info",
+                    cvss=2.0,
+                    port=layer.get("port"),
+                    service=layer.get("scheme", "http"),
+                    description="robots.txt returned rules that may reveal sensitive paths (informational).",
+                    solution="Ensure robots.txt does not list private admin paths; use auth instead of obscurity.",
                     refs=["CWE-200"],
                 )
             )

@@ -18,10 +18,12 @@ Network vulnerability **assessment** assistant: fast parallel discovery, targete
 
 3. **Service table** — Open ports with service names and version strings from Nmap.
 
-4. **Intel fusion** (optional checkbox / CLI flag) — Parallel probes:
-   - Reverse DNS (PTR), DNS aliases  
-   - HTTP(S) `GET /`: status line, `Server`, page title, security-related headers  
-   - TLS: negotiated version, cert subject/issuer/SANs, expiry (`intel_fusion.py`)
+4. **Intel fusion** (recommended: leave **ON** in GUI; omit `--no-fusion` in CLI) — Parallel probes:
+   - **Deep DNS** (`dns_deep.py` + `dnspython`): **A, AAAA, MX, NS, TXT, SOA, CNAME** for the hostname and (when applicable) a **naïve apex** domain (e.g. `www` → apex)  
+   - **Reverse DNS (PTR)** and **gethostbyname** aliases  
+   - **TCP reachability** probes on **80** and **443** (always), so you still get signal if Nmap missed a web port  
+   - **HTTP(S)** for **`/`** and **`/robots.txt`**: status line + **HTTP status code**, **all response headers** (values truncated in JSON for size), security header subset for plugins, HTML **title** on `/`, **body preview**  
+   - **TLS**: negotiated version, **cipher tuple**, subject/issuer, **SANs**, **notBefore/notAfter**, serial (`intel_fusion.py`)
 
 5. **Plugins** — Structured findings (plugin ID, severity, CVSS-style score, remediation):
    - Risky exposures (Telnet, FTP, SMB, databases, Redis, etc.)  
@@ -34,7 +36,58 @@ Network vulnerability **assessment** assistant: fast parallel discovery, targete
 
 8. **Persistence** — SQLite history + JSON blobs for ports, findings, intel (`database.py`).
 
-9. **Outputs** — PDF report, export folder with `scan_bundle.json`, matplotlib **dashboard** and **Spectral Surface** map (`spectral_surface.py`).
+9. **Outputs** — PDF report, export folder with `scan_bundle.json` (includes **`target_dossier`**: one-page structured summary), matplotlib **dashboard** and **Spectral Surface** map (`spectral_surface.py`).
+
+10. **`target_dossier`** (`target_dossier.py`) — Built for every **CLI** run and **export**; summarizes identity, DNS, surface, intel counts, and assessment counts. **Full raw intel** remains under `intel_fusion` in JSON.
+
+---
+
+## What you get about a target (coverage)
+
+| Area | Data |
+|------|------|
+| Network | Open TCP ports, service name, version/banner hints (Nmap) |
+| DNS | Deep records + apex pass; skipped for bare IPv4 input |
+| Identity | Resolved IPv4, PTR, hostname aliases |
+| Web | Per open or reachable 80/443: `/` and `/robots.txt`, headers, title, previews |
+| TLS | Protocol, cipher, cert fields, expiry |
+| Risk | Plugin findings, score, CVE *hints* from NVD keywords |
+
+**Not included by design:** full UDP sweep, authenticated OS patch lists, web app crawling, or guaranteed exploit validation. Extend the codebase if you need those.
+
+---
+
+## Exact run checklist (copy-paste)
+
+**1) One-time setup**
+
+```powershell
+cd path\to\AVS
+py -3 -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+```
+
+**2) Install Nmap** from [nmap.org](https://nmap.org/download.html) and confirm:
+
+```powershell
+nmap --version
+```
+
+**3) Run GUI (full intel by default)**
+
+```powershell
+.\.venv\Scripts\python main.py
+```
+
+Log in → leave **Intel fusion** checked → choose **hyper** → enter target → **Start assessment**. Review log sections: ports → intel → deep DNS → dossier summary → findings → CVE.
+
+**4) Run CLI (JSON including `target_dossier`)**
+
+```powershell
+.\.venv\Scripts\python cli.py -t YOUR_TARGET --profile hyper -o out.json
+```
+
+Open `out.json`: top-level keys include `open_ports`, `intel_fusion`, `findings`, `target_dossier`, `cve_hints`.
 
 ---
 
@@ -48,6 +101,8 @@ Network vulnerability **assessment** assistant: fast parallel discovery, targete
 | `scanner.py` | Nmap profiles + Hyper (pulse + targeted Nmap) |
 | `turbo_sweep.py` | Parallel TCP pulse sweep |
 | `intel_fusion.py` | DNS + HTTP(S) + TLS fusion |
+| `dns_deep.py` | Deep DNS (A/AAAA/MX/NS/TXT/SOA/CNAME) |
+| `target_dossier.py` | Unified summary object for JSON |
 | `plugins.py` | Finding records + intel plugins |
 | `vuln_checker.py` | Merges plugins + scoring |
 | `cve_lookup.py` | NVD keyword lookup |

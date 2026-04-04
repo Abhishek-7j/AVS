@@ -60,14 +60,32 @@ def generate_report(
             elements.append(Paragraph(f"<b>PTR:</b> {escape(ptr)}", styles["Normal"]))
         if aliases:
             elements.append(Paragraph(f"<b>DNS aliases:</b> {escape(aliases)}", styles["Normal"]))
+        dd = intel.get("dns_deep") or {}
+        if dd.get("apex_name"):
+            elements.append(Paragraph(f"<b>DNS apex:</b> {escape(str(dd['apex_name']))}", styles["Normal"]))
+        hr = dd.get("host") or {}
+        for rtype in ("A", "AAAA", "MX", "NS", "TXT"):
+            v = hr.get(rtype)
+            if isinstance(v, list) and v:
+                snippet = escape(", ".join(v[:6])[:400])
+                elements.append(Paragraph(f"<b>DNS {rtype}:</b> {snippet}", styles["Normal"]))
+        rp = dd.get("reachability_probe") or {}
+        if rp:
+            elements.append(
+                Paragraph(
+                    f"<b>TCP reachability:</b> 80={rp.get('tcp_80')} · 443={rp.get('tcp_443')}",
+                    styles["Normal"],
+                )
+            )
         elements.append(
             Paragraph(
-                f"<b>HTTP layers:</b> {len(intel.get('http_layers') or [])} · "
+                f"<b>HTTP probes:</b> {len(intel.get('http_layers') or [])} · "
                 f"<b>TLS records:</b> {len(intel.get('tls_layers') or [])}",
                 styles["Normal"],
             )
         )
-        for h in (intel.get("http_layers") or [])[:6]:
+        root_http = [h for h in (intel.get("http_layers") or []) if h.get("path", "/") == "/"]
+        for h in root_http[:6]:
             title = escape(str(h.get("title", ""))[:120])
             st = escape(str(h.get("status_line", ""))[:120])
             elements.append(
