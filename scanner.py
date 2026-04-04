@@ -39,7 +39,8 @@ def _resolve_host(target: str) -> str:
 
 def _parse_nmap_host(scanner: nmap.PortScanner, host: str) -> list[tuple]:
     results: list[tuple] = []
-    if host not in scanner:
+    # Do not use `host in scanner` — python-nmap's __contains__ breaks (passes int to __getitem__).
+    if not scanner.has_host(host):
         return results
     nm_host = scanner[host]
     for proto in nm_host.all_protocols():
