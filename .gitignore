@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.spec
+
+# AVS runtime / reports
+scan_history.db
+scan_report_*.pdf
+scan_export_*/
+scan_bundle.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.Desktop.ini
+Thumbs.db
+.env
+config.local.env
+
+# PyInstaller
+*.exe
