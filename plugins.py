@@ -227,6 +227,22 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                 )
             )
 
+    # Deserialize web findings and append them
+    for wf in getattr(intel, "web_findings", []):
+        out.append(
+            Finding(
+                plugin_id=wf.get("plugin_id", ""),
+                name=wf.get("name", ""),
+                severity=wf.get("severity", "Info"),
+                cvss=wf.get("cvss", 0.0),
+                port=wf.get("port"),
+                service=wf.get("service"),
+                description=wf.get("description", ""),
+                solution=wf.get("solution", ""),
+                refs=wf.get("refs", [])
+            )
+        )
+
     return _dedupe_findings(out)
 
 

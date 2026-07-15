@@ -32,9 +32,10 @@ def run_assessment(
 
     cve_block: dict[str, list] = {}
     if with_cve:
+        cpe_map = meta.get("cpes") or {}
         for port, service, version in rows:
             key = f"{port}/{service}"
-            cves = search_cve(service, version)
+            cves = search_cve(service, version, cpes=cpe_map.get(port))
             if cves:
                 cve_block[key] = [{"id": c[0], "desc": c[1]} for c in cves]
 
@@ -62,13 +63,28 @@ def main() -> int:
     p.add_argument(
         "--profile",
         default="hyper",
-        choices=["quick", "standard", "deep", "hyper"],
+        choices=["quick", "standard", "deep", "udp", "hyper"],
         help="Scan policy (default: hyper)",
     )
     p.add_argument("--no-fusion", action="store_true", help="Skip HTTP/TLS/DNS intel")
     p.add_argument("--no-cve", action="store_true", help="Skip NVD CVE lookups (faster)")
     p.add_argument("-o", "--output", help="Write JSON to file instead of stdout")
     args = p.parse_args()
+
+    # Startup Banner, Legal Disclaimer, and Dependency Checks
+    print("=" * 70, file=sys.stderr)
+    print(" AVS — AutoVuln Scanner (Headless Mode)", file=sys.stderr)
+    print(" WARNING: Scanning unauthorized targets is illegal.", file=sys.stderr)
+    print("          Ensure you have explicit written consent before testing.", file=sys.stderr)
+    print("=" * 70, file=sys.stderr)
+
+    import shutil
+    if not shutil.which("nmap"):
+        print("[WARNING] Nmap was not found on your system PATH.", file=sys.stderr)
+        print("          Port discovery will run in pure-Python TCP sweep mode.", file=sys.stderr)
+        print("          To enable full fingerprinting, install Nmap from:", file=sys.stderr)
+        print("          https://nmap.org/download.html", file=sys.stderr)
+        print("-" * 70, file=sys.stderr)
 
     try:
         bundle = run_assessment(
@@ -81,6 +97,8 @@ def main() -> int:
         print("Interrupted.", file=sys.stderr)
         return 130
     except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print(json.dumps({"error": str(e), "type": type(e).__name__}), file=sys.stderr)
         return 1
 
@@ -92,6 +110,7 @@ def main() -> int:
     else:
         print(text)
     return 0
+
 
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ class TargetIntel:
     dns_deep: dict[str, Any] = field(default_factory=dict)
     http_layers: list[dict[str, Any]] = field(default_factory=list)
     tls_layers: list[dict[str, Any]] = field(default_factory=list)
+    web_findings: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -317,6 +318,22 @@ def gather_intel(query: str, resolved_ip: str, scan_rows: list[tuple]) -> Target
                 meta = fut.result()
                 if meta.get("negotiated") or meta.get("subject"):
                     intel.tls_layers.append(meta)
+
+    # Crawl and fuzz open web ports
+    from web_fuzzer import fuzz_sensitive_paths, crawl_and_audit_forms
+    for port, tls in jobs:
+        scheme = "https" if tls else "http"
+        host_url = f"{scheme}://[{ipv4}]:{port}" if ":" in ipv4 else f"{scheme}://{ipv4}:{port}"
+        
+        # 1. Path fuzzing
+        fuzz_findings = fuzz_sensitive_paths(host_url, port, scheme)
+        for f in fuzz_findings:
+            intel.web_findings.append(f.as_dict())
+            
+        # 2. Form crawling and auditing
+        crawl_findings = crawl_and_audit_forms(host_url, port, scheme)
+        for f in crawl_findings:
+            intel.web_findings.append(f.as_dict())
 
     return intel
 

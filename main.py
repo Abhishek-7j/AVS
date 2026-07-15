@@ -154,6 +154,16 @@ def start_scan() -> None:
             results = scan_results
 
             ui_log(f"Resolved host: {resolved}\n")
+            if meta.get("nmap_missing"):
+                ui_log("⚠️ [WARNING] Nmap not found on PATH! Running in pure-Python scan mode.\n")
+                ui_log("             Install Nmap for advanced service fingerpringing: https://nmap.org/download.html\n\n")
+            if meta.get("filtered_ports"):
+                ui_log(f"🛡️ [Firewall/IDS] {len(meta['filtered_ports'])} ports filtered: ")
+                ui_log(f"{', '.join(map(str, meta['filtered_ports'][:12]))}")
+                if len(meta['filtered_ports']) > 12:
+                    ui_log("...")
+                ui_log("\n\n")
+
             if meta.get("pulse_open_ports") is not None:
                 ui_log(
                     f"⚡ Pulse sweep: {len(meta['pulse_open_ports'])} open TCP ports in signal set\n"
@@ -163,7 +173,7 @@ def start_scan() -> None:
             ui_log("\nPort\tService\tVersion\n")
             ui_log("—" * 40 + "\n")
             if not scan_results:
-                ui_log("(no open ports reported — check Nmap install / target reachability)\n")
+                ui_log("(no open ports reported — check target reachability / firewall rules)\n")
             for port, service, version in scan_results:
                 ui_log(f"{port}\t{service}\t{version}\n")
 
@@ -215,10 +225,11 @@ def start_scan() -> None:
             set_status("Querying NVD for related CVEs…")
             set_progress(current + step * 0.58)
 
-            ui_log("\n🔎 CVE keyword lookup (NVD API)\n")
+            ui_log("\n🔎 CVE lookup (NVD API)\n")
             ui_log("—" * 40 + "\n")
+            cpe_map = meta.get("cpes") or {}
             for port, service, version in scan_results:
-                cves = search_cve(service, version)
+                cves = search_cve(service, version, cpes=cpe_map.get(port))
                 if cves:
                     ui_log(f"\n{service} {version} (port {port})\n")
                     for cve_id, desc in cves:
@@ -383,6 +394,14 @@ def start_scanner() -> None:
         font=ctk.CTkFont(size=14, weight="bold"),
     )
     scan_button.pack(pady=6)
+
+    legal_warning = ctk.CTkLabel(
+        scanner_tab,
+        text="⚠️ WARNING: Authorized scanning only. Testing unauthorized networks is illegal.",
+        font=ctk.CTkFont(size=11, weight="bold"),
+        text_color="#f44336"
+    )
+    legal_warning.pack(pady=2)
 
     status_label = ctk.CTkLabel(scanner_tab, text="Status: Idle")
     status_label.pack(pady=4)

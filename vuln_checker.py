@@ -19,10 +19,14 @@ def check_vulnerabilities(
 ) -> list[Finding]:
     """Run network plugins + optional intel-derived checks (headers, TLS lifecycle)."""
     base = run_service_plugins(host, results)
+    
+    from auth_audit import run_authenticated_checks
+    auth_findings = run_authenticated_checks(host, results)
+    
     if intel is None:
-        return base
+        return merge_finding_lists(base, auth_findings)
     extra = run_intel_plugins(intel)
-    return merge_finding_lists(base, extra)
+    return merge_finding_lists(base, auth_findings, extra)
 
 
 def calculate_risk_score(findings: list[Finding]) -> tuple[int, str]:
