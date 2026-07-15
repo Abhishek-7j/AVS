@@ -72,10 +72,31 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
     """Headers, HSTS, CSP hints, certificate lifetime — requires gather_intel() first."""
     out: list[Finding] = []
 
+    # DNS Subdomain Takeover Check
+    dns_blob = getattr(intel, "dns_deep", {}) or {}
+    for domain_key in ("host", "apex"):
+        dangling = (dns_blob.get(domain_key) or {}).get("CNAME_dangling") if isinstance(dns_blob.get(domain_key), dict) else None
+        if dangling:
+            out.append(
+                Finding(
+                    plugin_id="AVS-DNS-TAKEOVER",
+                    name="Potential Subdomain Takeover (Dangling CNAME)",
+                    severity="High",
+                    cvss=7.8,
+                    port=None,
+                    service="dns",
+                    description=f"CNAME record points to '{dangling}', but this target does not resolve to any IP address. An attacker might be able to register the subdomain on that third-party cloud service.",
+                    solution="Remove the dangling CNAME record from DNS zone files, or register/claim the resource on the third-party cloud service.",
+                    refs=["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover"]
+                )
+            )
+            break
+
     for layer in intel.http_layers:
         port = layer.get("port")
         scheme = layer.get("scheme", "")
         headers = layer.get("headers") or {}
+        all_hdrs = layer.get("all_headers") or {}
         if not layer.get("reachable"):
             continue
         if layer.get("path", "/") != "/":
@@ -158,6 +179,97 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                     refs=["CWE-200"],
                 )
             )
+
+        # CORS Audit Check
+        acao = all_hdrs.get("access-control-allow-origin", "")
+        acac = all_hdrs.get("access-control-allow-credentials", "")
+        if acao == "*" and acac.lower() == "true":
+            out.append(
+                Finding(
+                    plugin_id="AVS-WEB-CORS-WILDCARD",
+                    name="Insecure CORS Configuration (Wildcard with Credentials)",
+                    severity="High",
+                    cvss=7.5,
+                    port=port,
+                    service=scheme,
+                    description="Access-Control-Allow-Origin is configured as wildcard '*' with Allow-Credentials set to true, allowing arbitrary domain access to credentials.",
+                    solution="Do not use '*' with Allow-Credentials; dynamic matching of origins should be implemented securely.",
+                    refs=["https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS"]
+                )
+            )
+
+        # Cookie Security Audit Check (HttpOnly/SameSite)
+        cookie_hdr = all_hdrs.get("set-cookie", "")
+        if cookie_hdr:
+            if "httponly" not in cookie_hdr.lower():
+                out.append(
+                    Finding(
+                        plugin_id="AVS-WEB-COOKIE-HTTPONLY",
+                        name="Set-Cookie without HttpOnly flag",
+                        severity="Medium",
+                        cvss=5.0,
+                        port=port,
+                        service=scheme,
+                        description="The session cookie is missing the HttpOnly flag, allowing accessibility from JavaScript and rendering it vulnerable to theft via Cross-Site Scripting (XSS).",
+                        solution="Ensure the 'HttpOnly' flag is appended to the cookie definition in response headers.",
+                        refs=["OWASP Cookie Security"]
+                    )
+                )
+            if "samesite" not in cookie_hdr.lower():
+                out.append(
+                    Finding(
+                        plugin_id="AVS-WEB-COOKIE-SAMESITE",
+                        name="Set-Cookie without SameSite flag",
+                        severity="Low",
+                        cvss=3.5,
+                        port=port,
+                        service=scheme,
+                        description="The cookie is missing the SameSite flag, rendering it potentially vulnerable to CSRF.",
+                        solution="Append 'SameSite=Lax' or 'SameSite=Strict' to set-cookie responses.",
+                        refs=["OWASP Cookie Security"]
+                    )
+                )
+
+        # HTTP Server Headers Disclosure Audit
+        for hdr_key, plugin_id, name in [
+            ("x-aspnet-version", "AVS-WEB-DISCLOSE-ASPNET", "ASP.NET Version Disclosure"),
+            ("x-aspnetmvc-version", "AVS-WEB-DISCLOSE-ASPNETMVC", "ASP.NET MVC Version Disclosure"),
+            ("server", "AVS-WEB-DISCLOSE-SERVER", "Web Server Version Disclosure")
+        ]:
+            val = all_hdrs.get(hdr_key, "")
+            if val and (hdr_key != "server" or any(c in val for c in ("/", " ", "("))):
+                out.append(
+                    Finding(
+                        plugin_id=plugin_id,
+                        name=name,
+                        severity="Low",
+                        cvss=3.0,
+                        port=port,
+                        service=scheme,
+                        description=f"Detailed software/framework signature disclosed in '{hdr_key}' header: {val[:120]}",
+                        solution="Configure web server to hide specific software versions and platform framework names.",
+                        refs=["CWE-200"]
+                    )
+                )
+
+        # Insecure HTTP methods audit
+        allow_methods = all_hdrs.get("allow", "")
+        if allow_methods:
+            unsafe = [m.strip().upper() for m in allow_methods.split(",") if m.strip().upper() in ("TRACE", "PUT", "DELETE")]
+            if unsafe:
+                out.append(
+                    Finding(
+                        plugin_id="AVS-WEB-HTTP-METHODS",
+                        name="Unsafe HTTP Methods Enabled",
+                        severity="Medium",
+                        cvss=5.0,
+                        port=port,
+                        service=scheme,
+                        description=f"Web server advertises support for unsafe HTTP methods: {', '.join(unsafe)}",
+                        solution="Restrict HTTP methods allowed by the server to GET, POST, HEAD, and safe OPTIONS, blocking TRACE, PUT, and DELETE.",
+                        refs=["OWASP Testing for HTTP Methods"]
+                    )
+                )
 
     for layer in intel.http_layers:
         if layer.get("path") != "/robots.txt" or not layer.get("reachable"):

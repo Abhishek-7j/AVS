@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # Web Reporting Dashboard
+  report-viewer:
+    build: .
+    entrypoint: ["python", "report_viewer.py"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # Scanner CLI Service (for run-on-demand scans)
+  # Run: docker-compose run --rm scanner -t <target> --profile standard
+  scanner:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1

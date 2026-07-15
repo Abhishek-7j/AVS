@@ -43,6 +43,19 @@ def _resolve_many(name: str, lifetime: float = 2.5) -> dict[str, Any]:
             out[rtype] = {"result": "TIMEOUT"}
         except Exception as e:
             out[rtype] = {"error": type(e).__name__, "msg": str(e)[:120]}
+
+    # Proactive verification of CNAME target viability (Subdomain Takeover audit)
+    if "CNAME" in out and isinstance(out["CNAME"], list):
+        takeover_signals = ("github.io", "herokuapp.com", "cloudfront.net", "s3.amazonaws.com", "azurewebsites.net")
+        for target_cname in out["CNAME"]:
+            target_str = str(target_cname).rstrip(".").lower()
+            if any(sig in target_str for sig in takeover_signals):
+                # Verify if this CNAME actually resolves to an IP address
+                try:
+                    socket.gethostbyname(target_str)
+                except OSError:
+                    out["CNAME_dangling"] = target_str
+
     return out
 
 
