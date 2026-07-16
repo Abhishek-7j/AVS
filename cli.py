@@ -58,6 +58,63 @@ def run_assessment(
     return bundle
 
 
+def print_cli_summary(bundle: dict) -> None:
+    print("\n" + "=" * 75)
+    print("                      AVS Assessment Summary")
+    print("=" * 75)
+    print(f"Target Hostname/IP : {bundle['target']}")
+    print(f"Resolved Address   : {bundle['resolved']}")
+    print(f"Scan Policy Profile: {bundle['profile']}")
+    print(f"Assessment Time    : {bundle['scanned_at_utc'][:16].replace('T', ' ')} UTC")
+    print("-" * 75)
+    
+    # 1. Open Ports
+    print("[+] Discovered Services:")
+    ports = bundle.get("open_ports", [])
+    if not ports:
+        print("  No open ports detected.")
+    else:
+        print(f"  {'PORT':<10}{'SERVICE':<15}{'VERSION'}")
+        print(f"  {'-'*8:<10}{'-'*13:<15}{'-'*15}")
+        for p in ports:
+            print(f"  {p['port']:<10}{p['service']:<15}{p.get('version') or 'unknown'}")
+            
+    print("-" * 75)
+    
+    # 2. Vulnerability Findings
+    print("[!] Discovered Vulnerabilities:")
+    findings = bundle.get("findings", [])
+    if not findings:
+        print("  No vulnerabilities or misconfigurations detected. Target is secure!")
+    else:
+        order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+        sorted_findings = sorted(findings, key=lambda x: order.get(x.get("severity", "info").lower(), 5))
+        for f in sorted_findings:
+            sev = f.get("severity", "INFO").upper()
+            port_info = f"Port {f.get('port')}" if f.get("port") else "System"
+            print(f"\n  [{sev}] {f.get('name')} ({f.get('plugin_id')}) — {port_info}")
+            
+            desc = f.get("description", "")
+            if "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n" in desc:
+                parts = desc.split("\n\n[Why This Vulnerability Occurred / Organizational Impact]\n", 1)
+                clean_desc = parts[0]
+                root_cause = parts[1]
+                print(f"    Description: {clean_desc}")
+                print(f"    Root Cause : {root_cause}")
+            else:
+                print(f"    Description: {desc}")
+                
+            print(f"    Remediation: {f.get('solution')}")
+            
+    print("\n" + "-" * 75)
+    
+    # 3. Overall Risk Score
+    print("[=] Overall Risk Rating:")
+    print(f"  Security Score : {bundle['score']} / 100")
+    print(f"  Risk Level     : {bundle['risk_level'].upper()} RISK")
+    print("=" * 75 + "\n")
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="AVS — AutoVuln Scanner (headless JSON)")
     p.add_argument("-t", "--target", required=True, help="Hostname or IP")
@@ -103,15 +160,18 @@ def main() -> int:
         print(json.dumps({"error": str(e), "type": type(e).__name__}), file=sys.stderr)
         return 1
 
+    # Print the terminal dashboard summary
+    print_cli_summary(bundle)
+
     text = json.dumps(bundle, indent=2)
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(text)
         print(f"Wrote {args.output}", file=sys.stderr)
     else:
-        print(text)
+        # Avoid double printing when outputting json directly to stdout
+        pass
     return 0
-
 
 
 if __name__ == "__main__":
