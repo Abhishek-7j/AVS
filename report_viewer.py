@@ -28,7 +28,12 @@ from plugins import Finding
 
 import os
 PORT = int(os.environ.get("PORT", 8080))
-DISABLE_HTTPS = os.environ.get("AVS_DISABLE_HTTPS", "false").lower() in ("1", "true", "yes") or os.path.exists("/.dockerenv")
+DISABLE_HTTPS = (
+    os.environ.get("AVS_DISABLE_HTTPS", "false").lower() in ("1", "true", "yes")
+    or os.path.exists("/.dockerenv")
+    or "RENDER" in os.environ
+    or "PORT" in os.environ
+)
 
 # Dicts to track active scans and console log streams
 ACTIVE_SCANS: dict[str, str] = {}
@@ -1143,7 +1148,7 @@ def run_server() -> None:
     
     socketserver.TCPServer.allow_reuse_address = True
     
-    with socketserver.TCPServer(("", PORT), SecureReportServerHandler) as httpd:
+    with socketserver.TCPServer(("0.0.0.0", PORT), SecureReportServerHandler) as httpd:
         if not DISABLE_HTTPS:
             # 1. Generate SSL Certificate and key if missing
             generate_self_signed_cert("cert.pem", "key.pem")
