@@ -27,10 +27,24 @@ def get_cached_cves(query_key: str) -> list[tuple[str, str]] | None:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT cve_json FROM cve_cache WHERE query_key = ?", (query_key,))
+            cursor.execute("SELECT cve_json, updated_at FROM cve_cache WHERE query_key = ?", (query_key,))
             row = cursor.fetchone()
             if row:
-                return [tuple(x) for x in json.loads(row[0])]
+                cve_json, updated_at_str = row
+                # Check cache age (invalidate after 7 days to poll for newly discovered CVEs)
+                from datetime import datetime, timezone
+                try:
+                    updated_at = datetime.strptime(updated_at_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                    age_days = (datetime.now(timezone.utc) - updated_at).days
+                    if age_days < 7:
+                        return [tuple(x) for x in json.loads(cve_json)]
+                    else:
+                        # Stale cache: remove it to allow refreshing against latest NVD CVE releases
+                        conn.execute("DELETE FROM cve_cache WHERE query_key = ?", (query_key,))
+                        conn.commit()
+                except Exception:
+                    # In case of formatting anomaly, default to return cached data
+                    return [tuple(x) for x in json.loads(cve_json)]
     except Exception:
         pass
     return None
