@@ -181,6 +181,26 @@ class SecureReportServerHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
             
+        elif self.path == "/delete":
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length).decode('utf-8')
+            params = parse_qs(post_data)
+            folder = params.get('folder', [''])[0].strip()
+            
+            # Sanity check to avoid directory traversal
+            if folder and folder.startswith("scan_export_") and ".." not in folder and "/" not in folder and "\\" not in folder:
+                if os.path.exists(folder) and os.path.isdir(folder):
+                    try:
+                        shutil.rmtree(folder)
+                    except Exception:
+                        pass
+            
+            # Redirect back to home dashboard
+            self.send_response(303)
+            self.send_header('Location', '/')
+            self.end_headers()
+            return
+            
         self.send_error(404, "Route Not Found")
 
     def do_GET(self) -> None:
@@ -783,6 +803,10 @@ class SecureReportServerHandler(http.server.SimpleHTTPRequestHandler):
                         <a class="btn-action btn-report" href="/report?folder={item['folder']}">Interactive View</a>
                         {pdf_btn}
                         <a class="btn-action btn-json" href="/{item['folder']}/scan_bundle.json" target="_blank">JSON</a>
+                        <form action="/delete" method="POST" style="display:inline; margin-left:6px;" onsubmit="return confirm('Are you sure you want to delete this scan?')">
+                            <input type="hidden" name="folder" value="{item['folder']}">
+                            <button type="submit" class="btn-action btn-delete">Delete</button>
+                        </form>
                     </td>
                 </tr>
                 """
@@ -1037,6 +1061,18 @@ class SecureReportServerHandler(http.server.SimpleHTTPRequestHandler):
         .btn-json:hover {{
             background: rgba(255, 255, 255, 0.15);
         }}
+        .btn-delete {{
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            cursor: pointer;
+            outline: none;
+        }}
+        .btn-delete:hover {{
+            background: #ef4444;
+            color: white;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }}
         .action-cell {{
             text-align: right;
             white-space: nowrap;
@@ -1079,63 +1115,61 @@ class SecureReportServerHandler(http.server.SimpleHTTPRequestHandler):
             <span class="status-dot"></span> HTTPS Secure Active
         </div>
     </header>
-    <main>
-        <div class="grid">
-            <!-- Left Column: Scan Trigger Form -->
-            <div class="container">
-                <div class="form-title">Trigger Vulnerability Scan</div>
-                <form action="/scan" method="POST">
-                    <div class="form-group">
-                        <label for="target">Target IP / Hostname</label>
-                        <input class="input-text" type="text" id="target" name="target" placeholder="e.g. scanme.nmap.org" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="ports">Custom Port Scope (Optional)</label>
-                        <input class="input-text" type="text" id="ports" name="ports" placeholder="e.g. 22,80,443 or 1-1000">
-                    </div>
-                    <div class="form-group">
-                        <label for="profile">Scan Policy Profile</label>
-                        <select class="input-text" id="profile" name="profile">
-                            <option value="quick">Quick TCP Discovery</option>
-                            <option value="standard" selected>Standard Assessment</option>
-                            <option value="deep">Deep Version & NSE Audit</option>
-                            <option value="udp">UDP Service Sweep</option>
-                            <option value="hyper">Hyper Composite Pipeline</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="margin-top: 20px;">
-                        <label class="checkbox-group">
-                            <input type="checkbox" name="fusion" value="true" checked>
-                            <span>Enable Intel Fusion (DNS/HTTP/TLS)</span>
-                        </label>
-                        <label class="checkbox-group">
-                            <input type="checkbox" name="cve" value="true" checked>
-                            <span>Enable NVD CVE Lookup</span>
-                        </label>
-                    </div>
-                    <button type="submit" class="btn-submit">Start Assessment</button>
-                </form>
-            </div>
-            
-            <!-- Right Column: Scan History Grid -->
-            <div class="container" style="overflow-x: auto;">
-                <div class="form-title">Completed Assessments</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Target</th>
-                            <th>Scan Date (UTC)</th>
-                            <th>Ports</th>
-                            <th>Findings</th>
-                            <th>Risk Level</th>
-                            <th style="text-align: right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
-            </div>
+    <main style="display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 1100px; padding: 0 20px 60px 20px; box-sizing: border-box;">
+        <!-- Top: Scan Trigger Form -->
+        <div class="container">
+            <div class="form-title">AVS Assessment</div>
+            <form action="/scan" method="POST">
+                <div class="form-group">
+                    <label for="target">Target IP / Hostname</label>
+                    <input class="input-text" type="text" id="target" name="target" placeholder="e.g. scanme.nmap.org" required>
+                </div>
+                <div class="form-group">
+                    <label for="ports">Custom Port Scope (Optional)</label>
+                    <input class="input-text" type="text" id="ports" name="ports" placeholder="e.g. 22,80,443 or 1-1000">
+                </div>
+                <div class="form-group">
+                    <label for="profile">Scan Policy Profile</label>
+                    <select class="input-text" id="profile" name="profile">
+                        <option value="quick">Quick TCP Discovery</option>
+                        <option value="standard" selected>Standard Assessment</option>
+                        <option value="deep">Deep Version & NSE Audit</option>
+                        <option value="udp">UDP Service Sweep</option>
+                        <option value="hyper">Hyper Composite Pipeline</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label class="checkbox-group">
+                        <input type="checkbox" name="fusion" value="true" checked>
+                        <span>Enable Intel Fusion (DNS/HTTP/TLS)</span>
+                    </label>
+                    <label class="checkbox-group">
+                        <input type="checkbox" name="cve" value="true" checked>
+                        <span>Enable NVD CVE Lookup</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn-submit">Start Assessment</button>
+            </form>
+        </div>
+        
+        <!-- Bottom: Scan History Grid -->
+        <div class="container" style="overflow-x: auto;">
+            <div class="form-title">Completed Assessments</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Target</th>
+                        <th>Scan Date (UTC)</th>
+                        <th>Ports</th>
+                        <th>Findings</th>
+                        <th>Risk Level</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
         </div>
     </main>
 </body>
