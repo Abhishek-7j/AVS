@@ -24,8 +24,9 @@ def run_assessment(
     profile: str,
     fusion: bool,
     with_cve: bool,
+    ports_spec: str | None = None,
 ) -> dict:
-    rows, resolved, meta = scan_target(target, profile=profile)
+    rows, resolved, meta = scan_target(target, profile=profile, ports_spec=ports_spec)
     intel = gather_intel(target, resolved, rows) if fusion else None
     findings = check_vulnerabilities(resolved, rows, intel=intel)
     score, risk = calculate_risk_score(findings)

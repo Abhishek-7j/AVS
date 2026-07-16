@@ -115,7 +115,7 @@ def _run_nmap(host: str, arguments: str) -> tuple[list[tuple], list[int], dict[i
     return out, filtered, cpes
 
 
-def scan_target(target: str, profile: str = "standard") -> tuple[list[tuple], str, dict[str, Any]]:
+def scan_target(target: str, profile: str = "standard", ports_spec: str | None = None) -> tuple[list[tuple], str, dict[str, Any]]:
     """
     Returns (results, resolved_host, meta).
 
@@ -138,7 +138,20 @@ def scan_target(target: str, profile: str = "standard") -> tuple[list[tuple], st
             from udp_prober import scan_common_udp
             rows = scan_common_udp(host)
             return rows, host, meta
-        pulse = turbo_tcp_scan(host, timeout=0.28, max_workers=128)
+        
+        # If custom ports spec is supplied in pure-python fallback, parse it
+        custom_ports = None
+        if ports_spec:
+            try:
+                if "-" in ports_spec:
+                    start_p, end_p = map(int, ports_spec.split("-", 1))
+                    custom_ports = list(range(start_p, end_p + 1))
+                else:
+                    custom_ports = [int(p.strip()) for p in ports_spec.split(",")]
+            except Exception:
+                pass
+                
+        pulse = turbo_tcp_scan(host, ports=custom_ports, timeout=0.28, max_workers=128)
         rows = [(p, "open", "unknown service (Nmap missing)") for p in pulse]
         return rows, host, meta
 
@@ -163,6 +176,12 @@ def scan_target(target: str, profile: str = "standard") -> tuple[list[tuple], st
         return rows, host, meta
 
     args = NMAP_PROFILES.get(profile, NMAP_PROFILES["standard"]) + extra_args
+    if ports_spec:
+        # Override profile port range with custom spec (e.g. -p22,80)
+        args = args.replace("-F", "").replace("-sV", "")  # strip profile specs
+        # Enforce version scan & open filter alongside custom ports
+        args = f"-Pn -p{ports_spec} -sV --open {args}{extra_args}"
+
     rows, filtered, cpes = _run_nmap(host, args)
     
     if profile == "udp":

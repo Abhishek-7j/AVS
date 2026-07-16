@@ -1,0 +1,3 @@
+@echo off
+echo Opening AVS Assessment Center Dashboard (HTTPS)...
+start https://localhost:8080
