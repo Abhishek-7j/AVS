@@ -26,7 +26,9 @@ from exporter import export_full_report
 from report_generator import generate_report
 from plugins import Finding
 
-PORT = 8080
+import os
+PORT = int(os.environ.get("PORT", 8080))
+DISABLE_HTTPS = os.environ.get("AVS_DISABLE_HTTPS", "false").lower() in ("1", "true", "yes")
 
 # Dicts to track active scans and console log streams
 ACTIVE_SCANS: dict[str, str] = {}
@@ -1139,20 +1141,25 @@ class SecureReportServerHandler(http.server.SimpleHTTPRequestHandler):
 def run_server() -> None:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
-    # 1. Generate SSL Certificate and key if missing
-    generate_self_signed_cert("cert.pem", "key.pem")
-    
     socketserver.TCPServer.allow_reuse_address = True
     
     with socketserver.TCPServer(("", PORT), SecureReportServerHandler) as httpd:
-        # 2. Wrap the socket with TLS SSL context
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
-        httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-        
+        if not DISABLE_HTTPS:
+            # 1. Generate SSL Certificate and key if missing
+            generate_self_signed_cert("cert.pem", "key.pem")
+            # 2. Wrap the socket with TLS SSL context
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+            httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+            proto = "HTTPS"
+            url_scheme = "https"
+        else:
+            proto = "HTTP"
+            url_scheme = "http"
+            
         print("=" * 60)
-        print(f" AVS Assessment Console SECURE Web Server Active!")
-        print(f" Web Interface URL: https://localhost:{PORT}")
+        print(f" AVS Assessment Console {proto} Web Server Active!")
+        print(f" Web Interface URL: {url_scheme}://localhost:{PORT}")
         print("=" * 60)
         try:
             httpd.serve_forever()
