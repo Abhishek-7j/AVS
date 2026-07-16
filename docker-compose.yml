@@ -16,6 +16,7 @@ services:
   # Run: docker-compose run --rm scanner -t <target> --profile standard
   scanner:
     build: .
+    entrypoint: ["python", "cli.py"]
     volumes:
       - .:/app
     environment:

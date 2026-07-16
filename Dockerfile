@@ -15,5 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source code
 COPY . .
 
-# Set default entrypoint to run cli.py
-ENTRYPOINT ["python", "cli.py"]
+# Expose default port
+EXPOSE 8080
+
+# Default command runs the web reporting console
+CMD ["python", "report_viewer.py"]
