@@ -18,6 +18,7 @@ scan_history.db
 scan_report_*.pdf
 scan_export_*/
 scan_bundle.json
+*.pem
 
 # IDE
 .idea/
