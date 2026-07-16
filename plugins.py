@@ -60,7 +60,13 @@ def run_tls_weakness_checks(host: str, open_ports: list[tuple]) -> list[Finding]
                     cvss=7.5,
                     port=port,
                     service=service,
-                    description=f"Server negotiated {negotiated}. TLS 1.0/1.1 are deprecated and weak.",
+                    description=(
+                        f"Server negotiated {negotiated}. TLS 1.0/1.1 are deprecated and weak. "
+                        "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                        "Legacy cryptographic configurations are often left active to support outdated client software. "
+                        "However, these protocols are susceptible to decryption attacks (like POODLE and BEAST), exposing "
+                        "sensitive organizational data and credentials in transit to eavesdropping."
+                    ),
                     solution="Disable TLS 1.0/1.1; enforce TLS 1.2+ with modern cipher suites.",
                     refs=["https://datatracker.ietf.org/doc/rfc8996/"],
                 )
@@ -85,7 +91,14 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                     cvss=7.8,
                     port=None,
                     service="dns",
-                    description=f"CNAME record points to '{dangling}', but this target does not resolve to any IP address. An attacker might be able to register the subdomain on that third-party cloud service.",
+                    description=(
+                        f"CNAME record points to '{dangling}', but this target does not resolve to any IP address. "
+                        "An attacker might be able to register the subdomain on that third-party cloud service. "
+                        "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                        "DNS records are often left pointed to external hosting (like GitHub Pages or AWS S3) after the "
+                        "actual service is deleted or moved. This dangling state allows attackers to sign up for the same "
+                        "cloud service using the organization's domain name, leading to complete brand hijacking and phishing."
+                    ),
                     solution="Remove the dangling CNAME record from DNS zone files, or register/claim the resource on the third-party cloud service.",
                     refs=["https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover"]
                 )
@@ -111,7 +124,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                     cvss=5.9,
                     port=port,
                     service="https",
-                    description="HTTPS responded without an HSTS header; clients may fall back to HTTP.",
+                    description=(
+                        "HTTPS responded without an HSTS header; clients may fall back to HTTP. "
+                        "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                        "Without HSTS, the web server fails to instruct browsers to enforce HTTPS-only connections. "
+                        "This leaves the organization vulnerable to SSL/TLS stripping attacks (e.g. via public Wi-Fi), "
+                        "where an attacker downgrades the user's connection to unencrypted HTTP to hijack session credentials."
+                    ),
                     solution="Send Strict-Transport-Security with includeSubDomains and preload after review.",
                     refs=["https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html"],
                 )
@@ -126,7 +145,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                     cvss=3.1,
                     port=port,
                     service=scheme,
-                    description="No nosniff directive; older browsers may MIME-sniff responses.",
+                    description=(
+                        "No nosniff directive; older browsers may MIME-sniff responses. "
+                        "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                        "MIME-sniffing allows web browsers to execute non-executable files (like uploaded text/images) "
+                        "as HTML or JavaScript if their contents match those types. This typically arises in organizations "
+                        "that host user-generated content without enforcing strict MIME types, leading to Cross-Site Scripting (XSS)."
+                    ),
                     solution='Add header: X-Content-Type-Options: nosniff.',
                     refs=["OWASP Secure Headers"],
                 )
@@ -141,7 +166,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                     cvss=4.3,
                     port=port,
                     service=scheme,
-                    description="Neither X-Frame-Options nor CSP frame control observed on root response.",
+                    description=(
+                        "Neither X-Frame-Options nor CSP frame control observed on root response. "
+                        "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                        "Without frame restriction headers, attackers can embed the organization's portal inside an invisible "
+                        "iframe on a malicious site. By overlaying transparent buttons, they can trick employees or "
+                        "customers into performing transactions (like account modifications) without their knowledge."
+                    ),
                     solution="Use CSP frame-ancestors or X-Frame-Options DENY/SAMEORIGIN as appropriate.",
                     refs=["CWE-1021"],
                 )
@@ -158,7 +189,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                         cvss=5.4,
                         port=port,
                         service=scheme,
-                        description="Session cookie may be sent over cleartext if mixed content exists.",
+                        description=(
+                            "Session cookie may be sent over cleartext if mixed content exists. "
+                            "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                            "Cookies lacking the Secure flag can be transmitted over unencrypted HTTP channels. If the site "
+                            "hosts any mixed content or lacks strict HSTS enforcement, session tokens can be sniffed in "
+                            "transit by network eavesdroppers."
+                        ),
                         solution="Set Secure (and HttpOnly, SameSite) on sensitive cookies.",
                         refs=["CWE-614"],
                     )
@@ -200,6 +237,8 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
 
         # Cookie Security Audit Check (HttpOnly/SameSite)
         cookie_hdr = all_hdrs.get("set-cookie", "")
+        # Cookie Security Audit Check (HttpOnly/SameSite)
+        cookie_hdr = all_hdrs.get("set-cookie", "")
         if cookie_hdr:
             if "httponly" not in cookie_hdr.lower():
                 out.append(
@@ -210,7 +249,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                         cvss=5.0,
                         port=port,
                         service=scheme,
-                        description="The session cookie is missing the HttpOnly flag, allowing accessibility from JavaScript and rendering it vulnerable to theft via Cross-Site Scripting (XSS).",
+                        description=(
+                            "The session cookie is missing the HttpOnly flag, allowing accessibility from JavaScript. "
+                            "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                            "HttpOnly attributes are often omitted in code frameworks by default. If an attacker identifies "
+                            "any Cross-Site Scripting (XSS) vulnerability on the domain, they can dynamically read the cookie "
+                            "via document.cookie and hijack active administrative or user sessions."
+                        ),
                         solution="Ensure the 'HttpOnly' flag is appended to the cookie definition in response headers.",
                         refs=["OWASP Cookie Security"]
                     )
@@ -224,7 +269,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                         cvss=3.5,
                         port=port,
                         service=scheme,
-                        description="The cookie is missing the SameSite flag, rendering it potentially vulnerable to CSRF.",
+                        description=(
+                            "The cookie is missing the SameSite flag, rendering it potentially vulnerable to CSRF. "
+                            "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                            "Browsers traditionally attach session cookies to cross-domain requests. Setting Lax or Strict "
+                            "SameSite attributes blocks the browser from transmitting cookies on unauthorized cross-origin requests, "
+                            "neutralizing Cross-Site Request Forgery (CSRF) entry points."
+                        ),
                         solution="Append 'SameSite=Lax' or 'SameSite=Strict' to set-cookie responses.",
                         refs=["OWASP Cookie Security"]
                     )
@@ -246,7 +297,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                         cvss=3.0,
                         port=port,
                         service=scheme,
-                        description=f"Detailed software/framework signature disclosed in '{hdr_key}' header: {val[:120]}",
+                        description=(
+                            f"Detailed software/framework signature disclosed in '{hdr_key}' header: {val[:120]}. "
+                            "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                            "Web servers expose framework and OS details by default to aid troubleshooting. However, "
+                            "this information discloses exact patch levels, allowing attackers to check for known public "
+                            "vulnerabilities (1-days) to plan targeted exploits against the platform."
+                        ),
                         solution="Configure web server to hide specific software versions and platform framework names.",
                         refs=["CWE-200"]
                     )
@@ -265,7 +322,13 @@ def run_intel_plugins(intel: TargetIntel) -> list[Finding]:
                         cvss=5.0,
                         port=port,
                         service=scheme,
-                        description=f"Web server advertises support for unsafe HTTP methods: {', '.join(unsafe)}",
+                        description=(
+                            f"Web server advertises support for unsafe HTTP methods: {', '.join(unsafe)}. "
+                            "\n\n[Why This Vulnerability Occurred / Organizational Impact]\n"
+                            "Older server profiles leave all HTTP methods active by default. Methods like TRACE can "
+                            "disclose authentication headers via Cross-Site Tracking (XST) attacks, while PUT/DELETE "
+                            "can allow attackers to upload files or remove documents on misconfigured endpoints."
+                        ),
                         solution="Restrict HTTP methods allowed by the server to GET, POST, HEAD, and safe OPTIONS, blocking TRACE, PUT, and DELETE.",
                         refs=["OWASP Testing for HTTP Methods"]
                     )
