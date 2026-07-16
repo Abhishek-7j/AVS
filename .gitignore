@@ -19,6 +19,7 @@ scan_report_*.pdf
 scan_export_*/
 scan_bundle.json
 *.pem
+cve_cache.db
 
 # IDE
 .idea/

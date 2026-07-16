@@ -42,7 +42,9 @@ FUZZ_PATHS: dict[str, tuple[str, str, float, str, str]] = {
 
 def fuzz_sensitive_paths(base_url: str, port: int, service: str) -> list[Finding]:
     findings = []
+    import config
     headers = {"User-Agent": "AutoVulnScanner-WebFuzzer/1.0"}
+    headers.update(config.http_headers())
 
     for path, (pid, name, sev, cvss, desc, soln) in FUZZ_PATHS.items():
         url = urljoin(base_url, path)
@@ -82,7 +84,9 @@ def fuzz_sensitive_paths(base_url: str, port: int, service: str) -> list[Finding
 
 def crawl_and_audit_forms(base_url: str, port: int, service: str) -> list[Finding]:
     findings = []
+    import config
     headers = {"User-Agent": "AutoVulnScanner-Crawler/1.0"}
+    headers.update(config.http_headers())
 
     visited: set[str] = set()
     to_visit: list[tuple[str, int]] = [(base_url, 0)]  # (url, depth)

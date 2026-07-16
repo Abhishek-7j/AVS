@@ -122,10 +122,19 @@ def _http_fingerprint(
             sock = raw
 
         host_header = server_hostname or host
+        import config
+        custom_hdrs = config.http_headers()
+        custom_lines = ""
+        for ck, cv in custom_hdrs.items():
+            if ck.lower() not in ("host", "connection"):
+                custom_lines += f"{ck}: {cv}\r\n"
+
         req = (
             f"GET {path} HTTP/1.1\r\nHost: {host_header}\r\n"
             "User-Agent: AutoVulnScanner-Intel/1.0\r\n"
-            "Accept: */*\r\nConnection: close\r\n\r\n"
+            "Accept: */*\r\n"
+            f"{custom_lines}"
+            "Connection: close\r\n\r\n"
         ).encode()
         sock.sendall(req)
 

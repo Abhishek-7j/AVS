@@ -14,3 +14,14 @@ def login_password() -> str:
 
 def skip_login() -> bool:
     return os.environ.get("AVS_SKIP_LOGIN", "").lower() in ("1", "true", "yes")
+
+
+def http_headers() -> dict[str, str]:
+    import json
+    headers_str = os.environ.get("AVS_HTTP_HEADERS", "")
+    if headers_str:
+        try:
+            return dict(json.loads(headers_str))
+        except Exception:
+            pass
+    return {}

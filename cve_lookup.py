@@ -1,3 +1,4 @@
+import sqlite3
 from urllib.parse import quote
 import requests
 
@@ -6,6 +7,48 @@ NVD_HEADERS = {
     "Accept": "application/json",
 }
 
+DB_PATH = "cve_cache.db"
+
+
+def init_db() -> None:
+    """Initializes a local cache database to store CVE details, allowing offline lookups."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cve_cache (
+                query_key TEXT PRIMARY KEY,
+                cve_json TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+
+def get_cached_cves(query_key: str) -> list[tuple[str, str]] | None:
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT cve_json FROM cve_cache WHERE query_key = ?", (query_key,))
+            row = cursor.fetchone()
+            if row:
+                return [tuple(x) for x in json.loads(row[0])]
+    except Exception:
+        pass
+    return None
+
+
+def cache_cves(query_key: str, results: list[tuple[str, str]]) -> None:
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO cve_cache (query_key, cve_json) VALUES (?, ?)",
+                (query_key, json.dumps(results))
+            )
+            conn.commit()
+    except Exception:
+        pass
+
+
+import json
 
 def _parse_nvd_response(data: dict) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
@@ -23,6 +66,20 @@ def _parse_nvd_response(data: dict) -> list[tuple[str, str]]:
 
 
 def search_cve(service: str, version: str, cpes: list[str] | None = None) -> list[tuple[str, str]]:
+    init_db()
+    
+    # Generate unique query key
+    query_key = ""
+    if cpes:
+        query_key = f"cpe:{','.join(sorted(filter(None, cpes)))}"
+    else:
+        query_key = f"key:{service}:{version}"
+        
+    # Check cache first (resolves NVD API offline/timeout limitations)
+    cached = get_cached_cves(query_key)
+    if cached is not None:
+        return cached
+
     vulnerabilities: list[tuple[str, str]] = []
 
     # 1. Try precise CPE lookup first if available
@@ -35,7 +92,7 @@ def search_cve(service: str, version: str, cpes: list[str] | None = None) -> lis
                 f"?cpeName={quote(cpe)}&resultsPerPage=5"
             )
             try:
-                response = requests.get(url, headers=NVD_HEADERS, timeout=12)
+                response = requests.get(url, headers=NVD_HEADERS, timeout=8)
                 response.raise_for_status()
                 data = response.json()
                 parsed = _parse_nvd_response(data)
@@ -44,7 +101,9 @@ def search_cve(service: str, version: str, cpes: list[str] | None = None) -> lis
             except Exception:
                 pass
             if len(vulnerabilities) >= 5:
-                return vulnerabilities[:5]
+                res = vulnerabilities[:5]
+                cache_cves(query_key, res)
+                return res
 
     # 2. Fall back to keyword lookup
     if not vulnerabilities:
@@ -57,12 +116,14 @@ def search_cve(service: str, version: str, cpes: list[str] | None = None) -> lis
             f"?keywordSearch={quote(keyword)}&resultsPerPage=5"
         )
         try:
-            response = requests.get(url, headers=NVD_HEADERS, timeout=12)
+            response = requests.get(url, headers=NVD_HEADERS, timeout=8)
             response.raise_for_status()
             data = response.json()
             vulnerabilities.extend(_parse_nvd_response(data))
         except Exception:
             pass
 
-    return vulnerabilities[:5]
-
+    res = vulnerabilities[:5]
+    if res:
+        cache_cves(query_key, res)
+    return res
