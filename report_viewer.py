@@ -28,7 +28,7 @@ from plugins import Finding
 
 import os
 PORT = int(os.environ.get("PORT", 8080))
-DISABLE_HTTPS = os.environ.get("AVS_DISABLE_HTTPS", "false").lower() in ("1", "true", "yes")
+DISABLE_HTTPS = os.environ.get("AVS_DISABLE_HTTPS", "false").lower() in ("1", "true", "yes") or os.path.exists("/.dockerenv")
 
 # Dicts to track active scans and console log streams
 ACTIVE_SCANS: dict[str, str] = {}
